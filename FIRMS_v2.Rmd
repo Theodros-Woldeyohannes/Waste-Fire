@@ -1,0 +1,280 @@
+---
+title: "FIRMS Data Processing"
+output: html_notebook
+---
+
+
+
+```{r}
+
+# read in libraries 
+library(lubridate)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+library(kableExtra)
+library(pivottabler)
+library(ggpubr)
+```
+```{r}
+
+# create date range
+date_range <- seq(mdy('8/7/2001'), mdy('7/17/2024'), by='1 day')
+```
+
+
+
+```{r}
+
+# read in FIRMS data
+LANDSAT <- read.csv('LANDSAT.csv')
+MODIS <- read.csv('MODIS.csv')
+VIIRS_NOAA_J1 <- read.csv('VIIRS_NOAA_J1.csv')
+VIIRS_NOAA_J2 <- read.csv('VIIRS_NOAA_J2.csv')
+VIIRS_SUOMI <- read.csv('VIIRS_SUOMI.csv')
+
+```
+
+```{r}
+
+# format date column
+LANDSAT$Date <- mdy_hms(LANDSAT$ACQ_DATE)
+MODIS$Date <- mdy_hms(MODIS$ACQ_DATE)
+VIIRS_NOAA_J1$Date <- mdy_hms(VIIRS_NOAA_J1$ACQ_DATE)
+VIIRS_NOAA_J2$Date <- mdy_hms(VIIRS_NOAA_J2$ACQ_DATE)
+VIIRS_SUOMI$Date <- mdy_hms(VIIRS_SUOMI$ACQ_DATE)
+
+```
+
+```{r}
+#Turn date range into data-frame
+dates_frame <- as.data.frame(date_range)
+```
+
+
+```{r}
+
+# Add columns as needed so each data-frame has the same columns
+LANDSAT[c("VERSION", "BRIGHT_T31", "FRP", "TYPE", "BRIGHTNESS")] <- NA
+VIIRS_NOAA_J1[c("TYPE")] <- NA
+VIIRS_NOAA_J2[c("TYPE")] <- NA
+```
+
+
+```{r}
+
+# make sure columns are in same order
+LANDSAT <- LANDSAT[names(MODIS)]
+VIIRS_NOAA_J1 <- VIIRS_NOAA_J1[names(MODIS)]
+VIIRS_NOAA_J2 <- VIIRS_NOAA_J2[names(MODIS)]
+VIIRS_SUOMI <- VIIRS_SUOMI[names(MODIS)]
+
+```
+
+
+```{r}
+
+#bind dataframes into single dataframe
+FIRMS_full <- rbind(LANDSAT, MODIS, VIIRS_NOAA_J1, VIIRS_NOAA_J2, VIIRS_SUOMI)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+#write formated FIRMS data to CSV
+write.csv(FIRMS_full, 'FIRMS_full.csv')
+```
+
+
+
+```{r}
+#Aggregate FIRMS detections by day
+fire_days <- FIRMS_full %>% distinct(SATELLITE, INSTRUMENT, Date)
+```
+
+
+```{r}
+#Create value column to count each day of detection
+fire_days$Value <- 1
+```
+
+
+```{r}
+#Calculate cumulative days of fire per year for each satellite
+fire_days_aggYr <- fire_days %>%
+  group_by(year = lubridate::year(Date), SATELLITE) %>%
+  summarize(sum = sum(Value))
+```
+
+```{r}
+#Factor satellite column so satellite can be easily re-labeled in ggplot
+fire_days_aggYr$SATELLITE <- factor(fire_days_aggYr$SATELLITE, levels = c("Aqua", "Terra", "N", "N20", "N21", "L8", "L9"))
+```
+
+
+```{r}
+#Plot cumulative days of detected fire for each satellite per year. Relabel each series to full instrument name, assing colors to series.
+ggplot(fire_days_aggYr, aes(year, sum, group = SATELLITE, color = SATELLITE)) +
+  geom_point() +
+  geom_line() +
+  scale_color_discrete(labels=c("MODIS Aqua", "MODIS Terra", "VIIRS SNPP", "VIIRS NOAA-20", "VIIRS NOAA-21", "OLI Landsat 8", "OLI Landsat 9"), type = c("#FFCCCB", "#FF0000", "#800080", "#00008B", "#ADD8E6", "#006400","#90EE90")) +
+  xlab("Year") +
+  ylab("Cumulative Days of Detected Fire") 
+  
+```
+
+```{r}
+#Read in filtered FIRMS data
+FIRMS_full_filtered <- read.csv("FIRMS_filtered.csv")
+```
+
+
+
+```{r}
+##Aggregate FIRMS detections by day
+fire_days_filtered <- FIRMS_full_filtered %>% distinct(SATELLITE, INSTRUMENT, Date)
+```
+
+
+
+```{r}
+#Create value column to count each day of detection
+fire_days_filtered$Value <- 1
+```
+
+
+
+```{r}
+#Format date column
+fire_days_filtered$Date_f <- mdy(fire_days_filtered$Date)
+```
+
+
+
+```{r}
+#Calculate cumulative days of fire per year for each satellite
+fire_days_filtered_aggYr <- fire_days_filtered %>%
+  group_by(year = lubridate::year(Date_f), SATELLITE) %>%
+  summarize(sum = sum(Value))
+```
+
+
+```{r}
+#Factor satellite column so satellite can be easily re-labeled in ggplot
+fire_days_filtered_aggYr$SATELLITE <- factor(fire_days_filtered_aggYr$SATELLITE, levels = c("Aqua", "Terra", "N", "N20", "L8", "L9"))
+```
+
+
+
+```{r}
+#Plot cumulative days of detected fire for each satellite per year. Relabel each series to full instrument name, assing colors to series.
+ggplot(fire_days_filtered_aggYr, aes(year, sum, group = SATELLITE, color = SATELLITE)) +
+  geom_point() +
+  geom_line() +
+  scale_color_discrete(labels=c("MODIS Aqua", "MODIS Terra", "VIIRS SNPP", "VIIRS NOAA-20",  "OLI Landsat 8", "OLI Landsat 9"), type = c("#FFCCCB", "#FF0000", "#800080", "#00008B", "#006400","#90EE90")) +
+  xlab("Year") +
+  ylab("Cumulative Days of Detected Fire") 
+
+```
+
+
+
+```{r}
+#Aggregate days of detection by month, calculate cumulative days of detection for each month over study period.
+fire_days_filtered_aggM <- fire_days_filtered %>%
+  group_by(month = lubridate::month(Date_f), SATELLITE) %>%
+  summarize(sum = sum(Value))
+```
+
+
+```{r}
+#Factor month numeric value as month abbreviation
+fire_days_filtered_aggM_f  <- fire_days_filtered_aggM  %>% mutate(month = month.abb[as.numeric(month)])
+```
+
+
+
+```{r}
+#Pivot table (wide)
+fire_days_filtered_aggM_fp <- fire_days_filtered_aggM_f %>% 
+  pivot_wider(names_from = SATELLITE, values_from = sum)
+```
+
+
+```{r}
+#Assign 0 to where satelllite N21 has no detections
+fire_days_filtered_aggM_fp$N21 <- 0
+```
+
+
+```{r}
+#Replace NA with 0 across dataframe 
+fire_days_filtered_aggM_fp[is.na(fire_days_filtered_aggM_fp)] <- 0
+```
+
+
+```{r}
+#Calculate total detections per month across all satellites 
+fire_days_filtered_aggM_fp$Total <- rowSums(fire_days_filtered_aggM_fp[,c(2:8)])
+```
+
+
+```{r}
+#Read in filtered FIRMS data corresponding to known fire events corresponding to identified reports 
+fire_days_filtered_nohist <- read.csv('FIRMS_filtered_nohist_noLS.csv')
+```
+
+
+
+```{r}
+#Create boxplots of FRP distribution per instrument
+FRP <- ggplot(data = fire_days_filtered_nohist, aes(x=as.character(INSTRUMENT), y=FRP)) +
+  geom_boxplot() +
+  labs(x="Instrument", y="Watts") +
+  ggtitle("Fire Radiative Power") +
+  theme(axis.text=element_text(size=20), axis.title=element_text(size=25), plot.title=element_text(size=25))
+
+FRP
+```
+
+
+
+```{r}
+#Create boxplots of Brightness distribution per instrument
+B <- ggplot(data = fire_days_filtered_nohist, aes(x=as.character(INSTRUMENT), y=BRIGHTNESS)) +
+  geom_boxplot() +
+  labs(x="Instrument", y="Kelvin") +
+  ggtitle("Brightness Temperature") +
+  theme(axis.text=element_text(size=20), axis.title=element_text(size=25), plot.title=element_text(size=25))
+
+B
+```
+
+
+
+```{r}
+#Combine boxplots for FRP and Brightness into single plot
+fig <- ggarrange(FRP, B, labels = c("(a)", "(b)"), hjust = -2, ncol = 2, nrow = 1) 
+  
+
+fig
+```
+
+
+
+```{r}
+#Summarize instrument data
+fire_days_filtered_nohist %>% split(.$INSTRUMENT) %>% map(summary)
+```
+
