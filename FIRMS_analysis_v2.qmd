@@ -1,0 +1,172 @@
+---
+title: "FIRMS_analysis_v2"
+format: html
+editor: visual
+---
+
+```{r}
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(patchwork)
+
+```
+
+```{r}
+# Plot FIRMS detections
+p1 <- ggplot(fire_days_aggYr, aes(year, sum, group = SATELLITE, color = SATELLITE, shape = SATELLITE)) +
+  geom_point(size = 3) +
+  geom_line() +
+  scale_color_discrete(
+    name = "Satellite",
+    labels=c("MODIS Aqua", "MODIS Terra", "VIIRS SNPP", "VIIRS NOAA-20", "VIIRS NOAA-21", "OLI Landsat 8", "OLI Landsat 9"), 
+    type = c("#FFCCCB", "#FF0000", "#800080", "#00008B", "#ADD8E6", "#006400","#90EE90")) +
+  scale_shape_manual(
+    name = "Satellite",
+    labels=c("MODIS Aqua", "MODIS Terra", "VIIRS SNPP", "VIIRS NOAA-20", "VIIRS NOAA-21", "OLI Landsat 8", "OLI Landsat 9"),
+    values = c(19, 17, 15, 18, 8, 3, 4)) +
+  ylab("Raw FIRMS data") +
+  theme_minimal(base_size = 16) +
+  theme(
+    axis.title.x = element_blank(), #remove x-axis labeling since you use from p2
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  ggtitle("Cumulative Days of Detected Fire")
+  
+
+```
+
+```{r}
+#Break filtered FIRMS data into distinct groups by satellite, instrument, and date
+fire_days_filtered <- FIRMS_full_filtered %>% distinct(SATELLITE, INSTRUMENT, Date)
+```
+
+```{r}
+#Assign value to distinct groups
+fire_days_filtered$Value <- 1
+```
+
+```{r}
+#Format date-time
+fire_days_filtered$Date_f <- mdy(fire_days_filtered$Date)
+```
+
+```{r}
+#Aggregated filtered FIRMS data by year
+fire_days_filtered_aggYr <- fire_days_filtered %>%
+  group_by(year = lubridate::year(Date_f), SATELLITE) %>%
+  summarize(sum = sum(Value))
+```
+
+```{r}
+fire_days_filtered_aggYr$SATELLITE <- factor(fire_days_filtered_aggYr$SATELLITE, levels = c("Aqua", "Terra", "N", "N20", "L8", "L9"))
+```
+
+```{r}
+#Plot FIRMS detections with false alarms removed
+p2 <- ggplot(fire_days_filtered_aggYr, aes(year, sum, group = SATELLITE, color = SATELLITE, shape = SATELLITE)) +
+  geom_point(size = 3) +
+  geom_line() +
+  scale_color_discrete(
+    name = "Satellite",
+    labels=c("MODIS Aqua", "MODIS Terra", "VIIRS SNPP", "VIIRS NOAA-20","OLI Landsat 8", "OLI Landsat 9"), 
+    type = c("#FFCCCB", "#FF0000", "#800080", "#00008B", "#006400","#90EE90")) +
+  scale_shape_manual(
+    name = "Satellite",
+    labels=c("MODIS Aqua", "MODIS Terra", "VIIRS SNPP", "VIIRS NOAA-20", "OLI Landsat 8", "OLI Landsat 9"),
+    values = c(19, 17, 15, 18, 3, 4)) +
+  xlab("Year") +
+  ylab("False Alarms Removed") +
+  theme_minimal(base_size = 16)
+```
+
+```{r}
+unique(fire_days_filtered_aggYr$SATELLITE)
+```
+
+```{r}
+#Deal with legends
+p1 <- p1 + theme(legend.position = "top")
+p2 <- p2 + theme(legend.position = "none")
+```
+
+```{r}
+#Stack sub-plots and collect a single legend
+combined_plot <- (p1/p2) #+ #stacks subplots vertically
+  # plot_layout(guides = "collect") & #collect one shared legend
+  # theme(legend.postion = "bottom") # legend placed bottom or right
+```
+
+```{r}
+#Display combined plot
+combined_plot
+```
+
+```{r}
+#Render and export plot at 300dpi
+ggsave("figure_2-highres.png", plot = combined_plot,
+       dpi = 300,
+       width = 16, height = 9,
+       units = "in")
+```
+
+
+
+```{r}
+#Read in filtered fire report detections
+fire_days_filtered_nohist <- read.csv('FIRMS_filtered_nohist_noLS.csv')
+
+```
+
+```{r}
+#Make FRP boxplot
+FRP <- ggplot(data = fire_days_filtered_nohist, aes(x=as.character(INSTRUMENT), y=FRP)) +
+  geom_boxplot() +
+  labs(x="Instrument", y="Watts") +
+  ggtitle("(a) Fire Radiative Power") +
+  theme(axis.text=element_text(size=20), axis.title=element_text(size=25), plot.title=element_text(size=25)) +
+  theme_minimal(base_size = 32)
+
+
+```
+
+```{r}
+#Make brightness boxplot
+B <- ggplot(data = fire_days_filtered_nohist, aes(x=as.character(INSTRUMENT), y=BRIGHTNESS)) +
+  geom_boxplot() +
+  labs(x="Instrument", y="Kelvin") +
+  ggtitle("(b) Brightness Temperature") +
+  theme(axis.text=element_text(size=20), axis.title=element_text(size=25), plot.title=element_text(size=25)) +
+  theme_minimal(base_size = 32)
+
+
+```
+
+```{r}
+# #Arrange into combined plot
+# fig <- ggarrange(FRP, B, labels = c("(a)", "(b)"), hjust = -2, ncol = 2, nrow = 1) 
+#   
+# 
+# fig
+
+comb_fig <- FRP + B
+```
+
+```{r}
+comb_fig
+```
+
+```{r}
+#Render and export plot at 300dpi
+ggsave("figure_3-highres.png", plot = comb_fig,
+       dpi = 300,
+       width = 16, height = 9,
+       units = "in")
+```
+
+
+```{r}
+#ggsave("FRIMS_FRP_Bright2.png")
+```
